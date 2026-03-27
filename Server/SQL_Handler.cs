@@ -10,63 +10,32 @@ namespace ASCIIAssault_Server
 {
     public class SQL_Handler
     {
-        public static string connectionString()
-        {
-            string? server = Utility.Config.GetConnectionString("Server");
-            string? port = Utility.Config.GetConnectionString("Port");
-            string? database = Utility.Config.GetConnectionString("Database");
-            string? uid = Utility.Config.GetConnectionString("Uid");
-            string? password = Utility.Config.GetConnectionString("Password");
+        private static IConfiguration? _config;
 
-            return $"Server={server};Port={port};Database={database};Uid={uid};Password={password};";
+        public static void SetConfiguration(IConfiguration config)
+        {
+            _config = config;
         }
 
-        public static bool RegisterUser(string username, string password)
+        public static string GetConnectionString()
         {
-            string hashedPassword = PasswordHelper.HashPassword(password);
+            string? server = _config?["Server"];
+            string? port = _config?["Port"];
+            string? database = _config?["Database"];
+            string? uid = _config?["Uid"];
+            string? password = _config?["Password"];
 
-            using (MySqlConnection conn = new MySqlConnection(connectionString()))
+            if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(port) || string.IsNullOrEmpty(database) || string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(password))
             {
-                conn.Open();
-
-                string checkQuery = "SELECT COUNT(*) FROM users WHERE username = @username";
-                using (MySqlCommand checkCmd = new MySqlCommand(checkQuery, conn))
-                {
-                    checkCmd.Parameters.AddWithValue("@username", username);
-                    long count = (long)checkCmd.ExecuteScalar();
-                    if (count > 0) return false;
-                }
-
-                string insertQuery = "INSERT INTO users (username, password_hash, created_at) VALUES (@username, @hash, @created)";
-                using (MySqlCommand insertCmd = new MySqlCommand(insertQuery, conn))
-                {
-                    insertCmd.Parameters.AddWithValue("@username", username);
-                    insertCmd.Parameters.AddWithValue("@hash", hashedPassword);
-                    insertCmd.Parameters.AddWithValue("@created", DateTime.UtcNow);
-                    insertCmd.ExecuteNonQuery();
-                }
+                throw new InvalidOperationException("Missing required configuration settings for database connection.");
             }
-            return true;
+
+            return $"Server={server};Port={port};Database={database};Uid={uid};Pwd={password};";
         }
 
-        public static bool AuthenticateUser(string username, string password)
+        public static MySqlConnection GetConnection()
         {
-            using (MySqlConnection conn = new MySqlConnection(connectionString()))
-            {
-                conn.Open();
-
-                string query = "SELECT password_hash FROM users WHERE username = @username";
-                using (MySqlCommand cmd = new MySqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@username", username);
-                    object? result = cmd.ExecuteScalar();
-
-                    if (result == null) return false;
-
-                    string storedHash = result.ToString() ?? "";
-                    return PasswordHelper.VerifyPassword(password, storedHash);
-                }
-            }
+            return new MySqlConnection(GetConnectionString());
         }
     }
 }
