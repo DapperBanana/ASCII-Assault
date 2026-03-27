@@ -18,33 +18,30 @@ namespace ASCIIAssault_Server
                 salt,
                 Iterations,
                 HashAlgorithmName.SHA256,
-                HashSize
-            );
+                HashSize);
 
-            string saltBase64 = Convert.ToBase64String(salt);
-            string hashBase64 = Convert.ToBase64String(hash);
-
-            return $"{Iterations}.{saltBase64}.{hashBase64}";
+            return Convert.ToBase64String(salt) + "." + Convert.ToBase64String(hash);
         }
 
-        public static bool VerifyPassword(string password, string storedHash)
+        public static bool VerifyPassword(string password, string hashedPassword)
         {
-            string[] parts = storedHash.Split('.');
-            if (parts.Length != 3) return false;
+            string[] parts = hashedPassword.Split('.');
+            if (parts.Length != 2)
+            {
+                return false; // Invalid format
+            }
 
-            int iterations = int.Parse(parts[0]);
-            byte[] salt = Convert.FromBase64String(parts[1]);
-            byte[] expectedHash = Convert.FromBase64String(parts[2]);
+            byte[] salt = Convert.FromBase64String(parts[0]);
+            byte[] hash = Convert.FromBase64String(parts[1]);
 
-            byte[] actualHash = Rfc2898DeriveBytes.Pbkdf2(
+            byte[] computedHash = Rfc2898DeriveBytes.Pbkdf2(
                 Encoding.UTF8.GetBytes(password),
                 salt,
-                iterations,
+                Iterations,
                 HashAlgorithmName.SHA256,
-                expectedHash.Length
-            );
+                HashSize);
 
-            return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+            return CryptographicOperations.FixedTimeEquals(hash, computedHash);
         }
     }
 }
