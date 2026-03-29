@@ -19,53 +19,27 @@ namespace ASCIIAssault_Server
             tcpListener = new TcpListener(IPAddress.Any, 6969);
             tcpListener.Start();
 
-            Console.WriteLine("Server started on port 6969. Waiting for connections...");
+            Console.WriteLine("Server started on port 6969. Listening for connections...");
 
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("New connection received.");
+                Console.WriteLine("Client connected!");
 
-                ClientHandler handler = new ClientHandler(tcpClient, this);
+                ClientHandler clientHandler = new ClientHandler(tcpClient, this);
+
                 lock (clientLock)
                 {
-                    clients.Add(handler);
+                    clients.Add(clientHandler);
                 }
 
-                Thread clientThread = new Thread(handler.HandleClient);
-                clientThread.IsBackground = true;
-                clientThread.Start();
+                //TODO: Start a thread to handle the client
             }
         }
 
-        public void BroadcastMessage(string message, ClientHandler sender)
+        public List<ClientHandler> GetClients()
         {
-            lock (clientLock)
-            {
-                foreach (ClientHandler client in clients)
-                {
-                    if (client != sender)
-                    {
-                        try
-                        {
-                            client.SendMessage(message);
-                        }
-                        catch
-                        {
-                            // client probably disconnected, will be cleaned up
-                        }
-                    }
-                }
-            }
-        }
-
-        public void RemoveClient(ClientHandler handler)
-        {
-            lock (clientLock)
-            {
-                clients.Remove(handler);
-            }
-            Console.WriteLine($"Client removed. Active connections: {clients.Count}");
+            return clients;
         }
     }
 }

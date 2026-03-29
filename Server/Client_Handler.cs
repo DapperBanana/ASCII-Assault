@@ -21,3 +21,11 @@ namespace ASCIIAssault_Server
             this.server = server;
             clientStream = tcpClient.GetStream();
         }
+
+        public string? ClientName
+        {
+            get { return clientName; }
+            set { clientName = value; }
+        }
+    }
+}
