@@ -9,6 +9,6 @@
 
 ## Next Steps
 
-1.  Implement basic message handling (authentication, chat) in `ClientHandler`.
-2.  Implement database user authentication.
-3.  Implement game state management.
+1.  Implement client handling threads in the server.
+2.  Implement basic message handling (authentication, chat) in `ClientHandler`.
+3.  Implement database user authentication.
