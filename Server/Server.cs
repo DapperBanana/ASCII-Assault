@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading; // Import the Threading namespace
 using System.Threading.Tasks;
 
 namespace ASCIIAssault_Server
@@ -33,8 +34,15 @@ namespace ASCIIAssault_Server
                     clients.Add(clientHandler);
                 }
 
-                //TODO: Start a thread to handle the client
+                Thread clientThread = new Thread(() => HandleClient(clientHandler)); // Start a new thread
+                clientThread.Start();
             }
+        }
+
+        private void HandleClient(ClientHandler clientHandler)
+        {
+            //TODO: Implement client handling logic here
+            Console.WriteLine("Client handling thread started.");
         }
 
         public List<ClientHandler> GetClients()
