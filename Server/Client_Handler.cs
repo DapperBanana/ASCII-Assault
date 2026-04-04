@@ -32,12 +32,31 @@ namespace ASCIIAssault_Server
                 while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine($"Received from {clientName ?? "Unknown"}: {data}");
-                    // Process data (authentication, game commands, etc.)
+                    Console.WriteLine($"Received: {data}");
 
-                    // For now, just echo the data back to the client
-                    byte[] responseBytes = Encoding.UTF8.GetBytes("Server received: " + data);
-                    clientStream.Write(responseBytes, 0, responseBytes.Length);
+                    // Basic message handling
+                    if (!authenticated)
+                    {
+                        if (data.StartsWith("AUTH "))
+                        {
+                            string username = data.Substring(5).Trim();
+                            //TODO: Authenticate against DB
+                            clientName = username;
+                            authenticated = true;
+                            SendMessage("Authentication successful!");
+                            Console.WriteLine($"Client authenticated as {username}");
+                        }
+                        else
+                        {
+                            SendMessage("Authentication required. Send 'AUTH <username>'");
+                        }
+                    }
+                    else
+                    {
+                        // Handle authenticated user messages (game commands, chat, etc.)
+                        Console.WriteLine($"Received from {clientName}: {data}");
+                        SendMessage($"Server received: {data}"); // Echo for now
+                    }
                 }
             }
             catch (Exception e)
@@ -53,6 +72,12 @@ namespace ASCIIAssault_Server
                 tcpClient.Close();
                 Console.WriteLine($"Client {clientName ?? "Unknown"} disconnected.");
             }
+        }
+
+        private void SendMessage(string message)
+        {
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            clientStream.Write(messageBytes, 0, messageBytes.Length);
         }
     }
 }
