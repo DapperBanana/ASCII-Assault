@@ -10,5 +10,4 @@
 ## Next Steps
 
 1.  Implement database user authentication.
-2.  Implement basic game commands.
-3.  Implement the core gameplay loop.
+2.  Implement basic gameplay loop.
