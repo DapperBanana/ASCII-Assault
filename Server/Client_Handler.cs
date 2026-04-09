@@ -31,53 +31,63 @@ namespace ASCIIAssault_Server
 
                 while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine($"Received: {data}");
-
-                    // Basic message handling
-                    if (!authenticated)
-                    {
-                        if (data.StartsWith("AUTH "))
-                        {
-                            string username = data.Substring(5).Trim();
-                            //TODO: Authenticate against DB
-                            clientName = username;
-                            authenticated = true;
-                            SendMessage("Authentication successful!");
-                            Console.WriteLine($"Client authenticated as {username}");
-                        }
-                        else
-                        {
-                            SendMessage("Authentication required. Send 'AUTH <username>'");
-                        }
-                    }
-                    else
-                    {
-                        // Handle authenticated user messages (game commands, chat, etc.)
-                        Console.WriteLine($"Received from {clientName}: {data}");
-                        SendMessage($"Server received: {data}"); // Echo for now
-                    }
+                    string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    ProcessMessage(message);
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error handling client {clientName ?? "Unknown"}: {e.Message}");
+                Console.WriteLine($"Exception in ClientHandler: {ex.Message}");
             }
             finally
             {
-                lock (server.clientLock)
-                {
-                    server.clients.Remove(this);
-                }
-                tcpClient.Close();
-                Console.WriteLine($"Client {clientName ?? "Unknown"} disconnected.");
+                CloseConnection();
             }
         }
 
-        private void SendMessage(string message)
+        private void ProcessMessage(string message)
         {
-            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-            clientStream.Write(messageBytes, 0, messageBytes.Length);
+            Console.WriteLine($"Received from {clientName ?? "Unknown"}: {message}");
+
+            //Basic command processing
+            if (message.StartsWith("/auth"))
+            {
+                Authenticate(message.Substring(6).Trim());
+            }
+            else
+            {
+                Broadcast(message);
+            }
         }
+
+        private void Authenticate(string credentials)
+        {
+            //TODO: Implement actual authentication against the DB.
+            authenticated = true;
+            clientName = credentials;
+            Console.WriteLine($"Client authenticated as {clientName}");
+        }
+
+        private void Broadcast(string message)
+        {
+            server.Broadcast(message, this);
+        }
+
+        public void SendMessage(string message)
+        {
+            byte[] buffer = Encoding.UTF8.GetBytes(message);
+            clientStream.Write(buffer, 0, buffer.Length);
+        }
+
+        private void CloseConnection()
+        {
+            lock (server.clientsLock)
+            {
+                server.clients.Remove(this);
+            }
+            tcpClient.Close();
+            Console.WriteLine($"Client {clientName ?? "Unknown"} disconnected.");
+        }
+
     }
 }
