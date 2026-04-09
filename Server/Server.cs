@@ -12,42 +12,44 @@ namespace ASCIIAssault_Server
     public class Server
     {
         private TcpListener? tcpListener;
-        private List<ClientHandler> clients = new List<ClientHandler>();
-        private readonly object clientLock = new object();
+        public List<ClientHandler> clients = new List<ClientHandler>();
+        public readonly object clientsLock = new object();
 
         public void StartServer()
         {
             tcpListener = new TcpListener(IPAddress.Any, 6969);
             tcpListener.Start();
-
-            Console.WriteLine("Server started on port 6969. Listening for connections...");
+            Console.WriteLine("Server started.");
 
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("Client connected!");
+                Console.WriteLine("New client connected.");
 
                 ClientHandler clientHandler = new ClientHandler(tcpClient, this);
-
-                lock (clientLock)
+                lock (clientsLock)
                 {
                     clients.Add(clientHandler);
                 }
 
-                Thread clientThread = new Thread(() => HandleClient(clientHandler)); // Start a new thread
+                Thread clientThread = new Thread(() => clientHandler.HandleClient());
                 clientThread.Start();
             }
         }
 
-        private void HandleClient(ClientHandler clientHandler)
+        public void Broadcast(string message, ClientHandler sender)
         {
-            //TODO: Implement client handling logic here
-            Console.WriteLine("Client handling thread started.");
+            lock (clientsLock)
+            {
+                foreach (var client in clients)
+                {
+                    if (client != sender)
+                    {
+                        client.SendMessage(message);
+                    }
+                }
+            }
         }
 
-        public List<ClientHandler> GetClients()
-        {
-            return clients;
-        }
     }
 }
