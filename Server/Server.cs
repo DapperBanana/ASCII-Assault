@@ -19,12 +19,13 @@ namespace ASCIIAssault_Server
         {
             tcpListener = new TcpListener(IPAddress.Any, 6969);
             tcpListener.Start();
-            Console.WriteLine("Server started.");
+
+            Console.WriteLine("Server started. Listening for connections...");
 
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("New client connected.");
+                Console.WriteLine("Client connected.");
 
                 ClientHandler clientHandler = new ClientHandler(tcpClient, this);
                 lock (clientsLock)
@@ -37,19 +38,12 @@ namespace ASCIIAssault_Server
             }
         }
 
-        public void Broadcast(string message, ClientHandler sender)
+        public void RemoveClient(ClientHandler client)
         {
             lock (clientsLock)
             {
-                foreach (var client in clients)
-                {
-                    if (client != sender)
-                    {
-                        client.SendMessage(message);
-                    }
-                }
+                clients.Remove(client);
             }
         }
-
     }
 }
