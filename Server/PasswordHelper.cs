@@ -17,28 +17,29 @@ namespace ASCIIAssault_Server
                 Encoding.UTF8.GetBytes(password),
                 salt,
                 Iterations,
-                HashAlgorithmName.SHA256,
                 HashSize);
 
-            return Convert.ToBase64String(salt) + "." + Convert.ToBase64String(hash);
+            byte[] hashBytes = new byte[SaltSize + HashSize];
+            Array.Copy(salt, 0, hashBytes, 0, SaltSize);
+            Array.Copy(hash, 0, hashBytes, SaltSize, HashSize);
+
+            return Convert.ToBase64String(hashBytes);
         }
 
         public static bool VerifyPassword(string password, string hashedPassword)
         {
-            string[] parts = hashedPassword.Split('.');
-            if (parts.Length != 2)
-            {
-                return false; // Invalid format
-            }
+            byte[] hashBytes = Convert.FromBase64String(hashedPassword);
 
-            byte[] salt = Convert.FromBase64String(parts[0]);
-            byte[] hash = Convert.FromBase64String(parts[1]);
+            byte[] salt = new byte[SaltSize];
+            Array.Copy(hashBytes, 0, salt, 0, SaltSize);
+
+            byte[] hash = new byte[HashSize];
+            Array.Copy(hashBytes, SaltSize, hash, 0, HashSize);
 
             byte[] computedHash = Rfc2898DeriveBytes.Pbkdf2(
                 Encoding.UTF8.GetBytes(password),
                 salt,
                 Iterations,
-                HashAlgorithmName.SHA256,
                 HashSize);
 
             return CryptographicOperations.FixedTimeEquals(hash, computedHash);
