@@ -10,4 +10,5 @@
 ## Next Steps
 
 1.  Implement database user authentication.
-2.  Implement basic gameplay loop.
+2.  Implement chat functionality.
+3.  Implement the core game loop.
