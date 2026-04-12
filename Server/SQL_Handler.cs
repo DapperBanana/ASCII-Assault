@@ -22,20 +22,58 @@ namespace ASCIIAssault_Server
             string? server = _config?["Server"];
             string? port = _config?["Port"];
             string? database = _config?["Database"];
-            string? uid = _config?["Uid"];
+            string? user = _config?["User"];
             string? password = _config?["Password"];
 
-            if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(port) || string.IsNullOrEmpty(database) || string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(password))
+            if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(port) || string.IsNullOrEmpty(database) || string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password))
             {
-                throw new InvalidOperationException("Missing required configuration settings for database connection.");
+                Console.WriteLine("Missing database configuration in appsettings.json");
+                return string.Empty;
             }
 
-            return $"Server={server};Port={port};Database={database};Uid={uid};Pwd={password};";
+            return $"Server={server};Port={port};Database={database};Uid={user};Pwd={password};";
         }
 
-        public static MySqlConnection GetConnection()
+        public static bool AuthenticateUser(string username, string password)
         {
-            return new MySqlConnection(GetConnectionString());
+            string connectionString = GetConnectionString();
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                return false;
+            }
+
+            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    connection.Open();
+
+                    string query = "SELECT password FROM users WHERE username = @username";
+                    using (MySqlCommand command = new MySqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@username", username);
+
+                        object? result = command.ExecuteScalar();
+
+                        if (result != null && result != DBNull.Value)
+                        {
+                            string hashedPassword = result.ToString();
+                            return PasswordHelper.VerifyPassword(password, hashedPassword);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"User {username} not found.");
+                            return false;
+                        }
+                    }
+                }
+                catch (MySqlException ex)
+                {
+                    Console.WriteLine($"Database error: {ex.Message}");
+                    return false;
+                }
+            }
         }
     }
 }

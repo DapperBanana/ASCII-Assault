@@ -41,9 +41,16 @@ namespace ASCIIAssault_Server
                     {
                         string username = parts[1];
                         string password = parts[2];
-                        //TODO: Add db check.
-                        Console.WriteLine($"Attempting to authenticate user: {username}");
-                        authenticated = true;
+                        //Add db check.
+                        if(SQL_Handler.AuthenticateUser(username, password))
+                        {
+                            Console.WriteLine($"User {username} authenticated successfully.");
+                            authenticated = true;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Authentication failed for user: {username}");
+                        }
 
                     }
                 }
