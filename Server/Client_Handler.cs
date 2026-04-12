@@ -24,7 +24,35 @@ namespace ASCIIAssault_Server
 
         public void HandleClient()
         {
+            byte[] buffer = new byte[1024];
+            int bytesRead;
 
+            try
+            {
+                bytesRead = clientStream.Read(buffer, 0, buffer.Length);
+                string message = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                Console.WriteLine($"Received: {message}");
+
+                //Basic authentication handling
+                if(message.StartsWith("AUTH"))
+                {
+                    string[] parts = message.Split(' ');
+                    if(parts.Length == 3)
+                    {
+                        string username = parts[1];
+                        string password = parts[2];
+                        //TODO: Add db check.
+                        Console.WriteLine($"Attempting to authenticate user: {username}");
+                        authenticated = true;
+
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error reading from client: {e.Message}");
+                server.RemoveClient(this);
+            }
         }
     }
 }
