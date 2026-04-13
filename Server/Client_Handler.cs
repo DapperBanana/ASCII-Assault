@@ -58,7 +58,7 @@ namespace ASCIIAssault_Server
                             }
                             else
                             {
-                                SendMessage("AUTH_INVALID");
+                                SendMessage("AUTH_FAIL");
                             }
                         }
                         else
