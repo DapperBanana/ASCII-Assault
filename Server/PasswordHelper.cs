@@ -19,30 +19,21 @@ namespace ASCIIAssault_Server
                 Iterations,
                 HashSize);
 
-            byte[] hashBytes = new byte[SaltSize + HashSize];
-            Array.Copy(salt, 0, hashBytes, 0, SaltSize);
-            Array.Copy(hash, 0, hashBytes, SaltSize, HashSize);
-
-            return Convert.ToBase64String(hashBytes);
+            return Convert.ToBase64String(salt) + "." + Convert.ToBase64String(hash);
         }
 
-        public static bool VerifyPassword(string password, string hashedPassword)
+        public static bool VerifyPassword(string password, string correctHash, string correctSalt)
         {
-            byte[] hashBytes = Convert.FromBase64String(hashedPassword);
-
-            byte[] salt = new byte[SaltSize];
-            Array.Copy(hashBytes, 0, salt, 0, SaltSize);
-
-            byte[] hash = new byte[HashSize];
-            Array.Copy(hashBytes, SaltSize, hash, 0, HashSize);
+            byte[] saltBytes = Convert.FromBase64String(correctSalt);
+            byte[] hashBytes = Convert.FromBase64String(correctHash);
 
             byte[] computedHash = Rfc2898DeriveBytes.Pbkdf2(
                 Encoding.UTF8.GetBytes(password),
-                salt,
+                saltBytes,
                 Iterations,
                 HashSize);
 
-            return CryptographicOperations.FixedTimeEquals(hash, computedHash);
+            return CryptographicOperations.FixedTimeEquals(computedHash, hashBytes);
         }
     }
 }
