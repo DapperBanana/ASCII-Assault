@@ -4,7 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading; // Import the Threading namespace
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ASCIIAssault_Server
@@ -20,7 +20,7 @@ namespace ASCIIAssault_Server
             tcpListener = new TcpListener(IPAddress.Any, 6969);
             tcpListener.Start();
 
-            Console.WriteLine("Server started. Listening for connections...");
+            Console.WriteLine("Server started. Listening on port 6969");
 
             while (true)
             {
@@ -38,12 +38,32 @@ namespace ASCIIAssault_Server
             }
         }
 
-        public void RemoveClient(ClientHandler client)
+        public void BroadcastMessage(string message, ClientHandler sourceClient)
         {
             lock (clientsLock)
             {
-                clients.Remove(client);
+                foreach (var client in clients)
+                {
+                    if (client != sourceClient && client.GetClientName() != null)
+                    {
+                        client.SendMessage(message);
+                    }
+                }
             }
+        }
+
+        public void RemoveClient(ClientHandler clientToRemove)
+        {
+            lock (clientsLock)
+            {
+                clients.Remove(clientToRemove);
+            }
+            Console.WriteLine("Client disconnected.");
+        }
+
+        public bool AuthenticateUser(string username, string password)
+        {
+            return SQL_Handler.CheckCredentials(username, password);
         }
     }
 }
