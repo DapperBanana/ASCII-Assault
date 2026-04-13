@@ -9,6 +9,5 @@
 
 ## Next Steps
 
-1.  Implement client handling threads in the server.
-2.  Implement basic message handling (authentication, chat) in `ClientHandler`.
-3.  Implement database user authentication.
+1.  Implement the core gameplay loop.
+2.  Implement client-side rendering.

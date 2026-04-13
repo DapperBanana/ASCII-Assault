@@ -24,42 +24,76 @@ namespace ASCIIAssault_Server
 
         public void HandleClient()
         {
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-
             try
             {
-                bytesRead = clientStream.Read(buffer, 0, buffer.Length);
-                string message = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                Console.WriteLine($"Received: {message}");
+                byte[] buffer = new byte[1024];
+                int bytesRead;
 
-                //Basic authentication handling
-                if(message.StartsWith("AUTH"))
+                while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    string[] parts = message.Split(' ');
-                    if(parts.Length == 3)
+                    string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                    Console.WriteLine("Received: " + data);
+
+                    // Process the data (e.g., authentication, game commands)
+                    if (!authenticated)
                     {
-                        string username = parts[1];
-                        string password = parts[2];
-                        //Add db check.
-                        if(SQL_Handler.AuthenticateUser(username, password))
+                        if (data.StartsWith("AUTH:"))
                         {
-                            Console.WriteLine($"User {username} authenticated successfully.");
-                            authenticated = true;
+                            string[] parts = data.Substring(5).Split(':');
+                            if (parts.Length == 2)
+                            {
+                                string username = parts[0];
+                                string password = parts[1];
+                                if (server.AuthenticateUser(username, password))
+                                {
+                                    authenticated = true;
+                                    clientName = username;
+                                    SendMessage("AUTH_OK");
+                                    server.BroadcastMessage(clientName + " joined the game!", this);
+                                }
+                                else
+                                {
+                                    SendMessage("AUTH_FAIL");
+                                }
+                            }
+                            else
+                            {
+                                SendMessage("AUTH_INVALID");
+                            }
                         }
                         else
                         {
-                            Console.WriteLine($"Authentication failed for user: {username}");
+                            SendMessage("NOT_AUTH");
                         }
-
+                    }
+                    else
+                    {
+                        server.BroadcastMessage(clientName + ": " + data, this);
                     }
                 }
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error reading from client: {e.Message}");
+                Console.WriteLine("Error handling client: " + e.Message);
+            }
+            finally
+            {
                 server.RemoveClient(this);
+                tcpClient.Close();
             }
         }
+
+        public void SendMessage(string message)
+        {
+            byte[] buffer = Encoding.ASCII.GetBytes(message);
+            clientStream.Write(buffer, 0, buffer.Length);
+            clientStream.Flush();
+        }
+
+        public string? GetClientName()
+        {
+            return clientName;
+        }
+
     }
 }
