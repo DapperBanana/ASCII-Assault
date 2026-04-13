@@ -25,52 +25,53 @@ namespace ASCIIAssault_Server
             string? user = _config?["User"];
             string? password = _config?["Password"];
 
-            if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(port) || string.IsNullOrEmpty(database) || string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password))
-            {
-                Console.WriteLine("Missing database configuration in appsettings.json");
-                return string.Empty;
-            }
-
-            return $"Server={server};Port={port};Database={database};Uid={user};Pwd={password};";
+            // Construct the connection string
+            string connectionString = $"Server={server};Port={port};Database={database};Uid={user};Pwd={password};";
+            return connectionString;
         }
 
-        public static bool AuthenticateUser(string username, string password)
+        public static bool CheckCredentials(string username, string password)
         {
-            string connectionString = GetConnectionString();
-
-            if (string.IsNullOrEmpty(connectionString))
+            if (_config == null)
             {
+                Console.WriteLine("Configuration is not initialized.");
                 return false;
             }
 
+            string connectionString = GetConnectionString();
+
             using (MySqlConnection connection = new MySqlConnection(connectionString))
-            {
+            {\r
                 try
                 {
                     connection.Open();
 
-                    string query = "SELECT password FROM users WHERE username = @username";
+                    string query = "SELECT password_hash, password_salt FROM users WHERE username = @username";
                     using (MySqlCommand command = new MySqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@username", username);
 
-                        object? result = command.ExecuteScalar();
+                        using (MySqlDataReader reader = command.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                string passwordHashFromDb = reader.GetString("password_hash");
+                                string passwordSaltFromDb = reader.GetString("password_salt");
 
-                        if (result != null && result != DBNull.Value)
-                        {
-                            string hashedPassword = result.ToString();
-                            return PasswordHelper.VerifyPassword(password, hashedPassword);
-                        }
-                        else
-                        {
-                            Console.WriteLine($"User {username} not found.");
-                            return false;
+                                // Verify the password
+                                return PasswordHelper.VerifyPassword(password, passwordHashFromDb, passwordSaltFromDb);
+                            }
+                            else
+                            {
+                                // User not found
+                                return false;
+                            }
                         }
                     }
                 }
                 catch (MySqlException ex)
                 {
-                    Console.WriteLine($"Database error: {ex.Message}");
+                    Console.WriteLine("Error connecting to the database: " + ex.Message);
                     return false;
                 }
             }
