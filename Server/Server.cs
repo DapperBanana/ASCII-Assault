@@ -46,7 +46,7 @@ namespace ASCIIAssault_Server
                 {
                     if (client != sourceClient && client.GetClientName() != null)
                     {
-                        client.SendMessage(message);
+                        client.SendMessage(sourceClient.GetClientName() + ": " + message);
                     }
                 }
             }
