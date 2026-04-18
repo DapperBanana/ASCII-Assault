@@ -26,6 +26,21 @@ namespace ASCIIAssault_Server
         {
             try
             {
+                // Authentication Phase
+                string authResult = AuthenticateClient();
+                if (authResult != "AUTH_OK")
+                {
+                    SendMessage(authResult);
+                    Console.WriteLine($"Authentication failed for client: {authResult}");
+                    return;
+                }
+                else
+                {
+                    SendMessage("AUTH_OK");
+                    Console.WriteLine($"Client {clientName} authenticated.");
+                }
+
+                // Gameplay Phase
                 byte[] buffer = new byte[1024];
                 int bytesRead;
 
@@ -44,6 +59,34 @@ namespace ASCIIAssault_Server
             {
                 server.RemoveClient(this);
                 tcpClient.Close();
+            }
+        }
+
+        private string AuthenticateClient()
+        {
+            byte[] buffer = new byte[1024];
+            int bytesRead = clientStream.Read(buffer, 0, buffer.Length);
+            string authMessage = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+
+            string[] parts = authMessage.Split(':', 2);
+            if (parts.Length != 2)
+            {
+                return "AUTH_INVALID_FORMAT";
+            }
+
+            string username = parts[0];
+            string password = parts[1];
+
+            bool isValid = SQL_Handler.VerifyPassword(username, password);
+            if (isValid)
+            {
+                SetClientName(username);
+                SetAuthenticated(true);
+                return "AUTH_OK";
+            }
+            else
+            {
+                return "AUTH_FAILED";
             }
         }
 
