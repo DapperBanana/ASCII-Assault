@@ -45,7 +45,7 @@ namespace ASCIIAssault_Server
             {
                 foreach (var client in clients)
                 {
-                    if (client != sender)
+                    if (client != sender && client.IsAuthenticated())
                     {
                         client.SendMessage(message);
                     }
