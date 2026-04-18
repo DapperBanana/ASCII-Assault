@@ -20,50 +20,46 @@ namespace ASCIIAssault_Server
             tcpListener = new TcpListener(IPAddress.Any, 6969);
             tcpListener.Start();
 
-            Console.WriteLine("Server started. Listening on port 6969");
+            Console.WriteLine("Server started...");
 
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("Client connected.");
+                Console.WriteLine("New client connected!");
 
                 ClientHandler clientHandler = new ClientHandler(tcpClient, this);
+
                 lock (clientsLock)
-                {
+                {\r
                     clients.Add(clientHandler);
                 }
 
-                Thread clientThread = new Thread(() => clientHandler.HandleClient());
+                Thread clientThread = new Thread(() => clientHandler.ProcessClient());
                 clientThread.Start();
             }
         }
 
-        public void BroadcastMessage(string message, ClientHandler sourceClient)
+        public void Broadcast(string message, ClientHandler sender)
         {
             lock (clientsLock)
             {
                 foreach (var client in clients)
                 {
-                    if (client != sourceClient && client.GetClientName() != null)
+                    if (client != sender)
                     {
-                        client.SendMessage(sourceClient.GetClientName() + ": " + message);
+                        client.SendMessage(message);
                     }
                 }
             }
         }
 
-        public void RemoveClient(ClientHandler clientToRemove)
+        public void RemoveClient(ClientHandler client)
         {
             lock (clientsLock)
             {
-                clients.Remove(clientToRemove);
+                clients.Remove(client);
+                Console.WriteLine($"Client {client.GetClientName() ?? "Unknown"} disconnected.  {clients.Count} clients remain.");
             }
-            Console.WriteLine("Client disconnected.");
-        }
-
-        public bool AuthenticateUser(string username, string password)
-        {
-            return SQL_Handler.CheckCredentials(username, password);
         }
     }
 }
