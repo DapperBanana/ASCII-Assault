@@ -22,7 +22,7 @@ namespace ASCIIAssault_Server
             clientStream = tcpClient.GetStream();
         }
 
-        public void HandleClient()
+        public void ProcessClient()
         {
             try
             {
@@ -31,50 +31,14 @@ namespace ASCIIAssault_Server
 
                 while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine("Received: " + data);
-
-                    // Process the data (e.g., authentication, game commands)
-                    if (!authenticated)
-                    {
-                        if (data.StartsWith("AUTH:"))
-                        {
-                            string[] parts = data.Substring(5).Split(':');
-                            if (parts.Length == 2)
-                            {
-                                string username = parts[0];
-                                string password = parts[1];
-                                if (server.AuthenticateUser(username, password))
-                                {
-                                    authenticated = true;
-                                    clientName = username;
-                                    SendMessage("AUTH_OK");
-                                    server.BroadcastMessage(clientName + " joined the game!", this);
-                                }
-                                else
-                                {
-                                    SendMessage("AUTH_FAIL");
-                                }
-                            }
-                            else
-                            {
-                                SendMessage("AUTH_FAIL");
-                            }
-                        }
-                        else
-                        {
-                            SendMessage("NOT_AUTH");
-                        }
-                    }
-                    else
-                    {
-                        server.BroadcastMessage(clientName + ": " + data, this);
-                    }
+                    string dataReceived = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                    Console.WriteLine($"Received from {clientName ?? "Unknown"}: {dataReceived}");
+                    server.Broadcast($"{clientName ?? "Unknown"}: {dataReceived}", this);
                 }
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error handling client: " + e.Message);
+                Console.WriteLine($"Error handling client {clientName ?? "Unknown"}: {e.Message}");
             }
             finally
             {
@@ -85,9 +49,20 @@ namespace ASCIIAssault_Server
 
         public void SendMessage(string message)
         {
-            byte[] buffer = Encoding.ASCII.GetBytes(message);
-            clientStream.Write(buffer, 0, buffer.Length);
-            clientStream.Flush();
+            try
+            {
+                byte[] buffer = Encoding.ASCII.GetBytes(message);
+                clientStream.Write(buffer, 0, buffer.Length);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error sending message to {clientName ?? "Unknown"}: {e.Message}");
+            }
+        }
+
+        public void SetClientName(string name)
+        {
+            clientName = name;
         }
 
         public string? GetClientName()
@@ -95,5 +70,14 @@ namespace ASCIIAssault_Server
             return clientName;
         }
 
+        public bool IsAuthenticated()
+        {
+            return authenticated;
+        }
+
+        public void SetAuthenticated(bool auth)
+        {
+            authenticated = auth;
+        }
     }
 }
