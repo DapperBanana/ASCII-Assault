@@ -9,5 +9,6 @@
 
 ## Next Steps
 
-1.  Implement the core gameplay loop.
+1.  Implement the core gameplay loop (server-side).
 2.  Implement client-side rendering.
+3.  Integrate client input with server-side game logic.
