@@ -16,6 +16,10 @@ namespace ASCIIAssault_Server
         private bool authenticated = false;
         private int x = 0; // Client's X position
         private int y = 0; // Client's Y position
+        private const int MaxX = 20; // Maximum X coordinate
+        private const int MaxY = 20; // Maximum Y coordinate
+        private const int MinX = 0; //Minimum X coordinate
+        private const int MinY = 0; //Minimum Y coordinate
 
         public ClientHandler(TcpClient tcpClient, Server server)
         {
@@ -71,23 +75,51 @@ namespace ASCIIAssault_Server
                     }
                     else if (dataReceived.ToUpper() == "MOVEUP" && authenticated)
                     {
-                        y--;
-                        SendMessage($"Moved up to {x}, {y}");
+                        if (y > MinY)
+                        {
+                            y--;
+                            SendMessage($"Moved up to {x}, {y}");
+                        }
+                        else
+                        {
+                            SendMessage("Reached top boundary");
+                        }
                     }
                     else if (dataReceived.ToUpper() == "MOVEDOWN" && authenticated)
                     {
-                        y++;
-                        SendMessage($"Moved down to {x}, {y}");
+                        if (y < MaxY)
+                        {
+                            y++;
+                            SendMessage($"Moved down to {x}, {y}");
+                        }
+                        else
+                        {
+                            SendMessage("Reached bottom boundary");
+                        }
                     }
                     else if (dataReceived.ToUpper() == "MOVELEFT" && authenticated)
                     {
-                        x--;
-                        SendMessage($"Moved left to {x}, {y}");
+                        if (x > MinX)
+                        {
+                            x--;
+                            SendMessage($"Moved left to {x}, {y}");
+                        }
+                        else
+                        {
+                            SendMessage("Reached left boundary");
+                        }
                     }
                     else if (dataReceived.ToUpper() == "MOVERIGHT" && authenticated)
                     {
-                        x++;
-                        SendMessage($"Moved right to {x}, {y}");
+                        if (x < MaxX)
+                        {
+                            x++;
+                            SendMessage($"Moved right to {x}, {y}");
+                        }
+                        else
+                        {
+                            SendMessage("Reached right boundary");
+                        }
                     }
                     else
                     {
