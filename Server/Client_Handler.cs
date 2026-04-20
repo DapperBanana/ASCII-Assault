@@ -26,67 +26,66 @@ namespace ASCIIAssault_Server
         {
             try
             {
-                // Authentication Phase
-                string authResult = AuthenticateClient();
-                if (authResult != "AUTH_OK")
-                {
-                    SendMessage(authResult);
-                    Console.WriteLine($"Authentication failed for client: {authResult}");
-                    return;
-                }
-                else
-                {
-                    SendMessage("AUTH_OK");
-                    Console.WriteLine($"Client {clientName} authenticated.");
-                }
-
-                // Gameplay Phase
                 byte[] buffer = new byte[1024];
                 int bytesRead;
 
                 while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     string dataReceived = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine($"Received from {clientName ?? "Unknown"}: {dataReceived}");
-                    server.Broadcast($"{clientName ?? "Unknown"}: {dataReceived}", this);
+                    Console.WriteLine($"Received from {clientName ?? "Unauthenticated Client"}: {dataReceived}");
+
+                    // Basic command handling (example: BROADCAST)
+                    if (dataReceived.ToUpper().StartsWith("BROADCAST ") && authenticated)
+                    {
+                        string message = dataReceived.Substring(10);
+                        server.Broadcast($"{clientName}: {message}", this);
+                    }
+                    else if (dataReceived.ToUpper().StartsWith("AUTH "))
+                    {
+                        string[] parts = dataReceived.Substring(5).Split(' ');
+                        if (parts.Length == 2)
+                        {
+                            string username = parts[0];
+                            string password = parts[1];
+
+                            if (SQL_Handler.AuthenticateUser(username, password))
+                            {
+                                clientName = username;
+                                authenticated = true;
+                                SendMessage("Authentication successful");
+                                Console.WriteLine($"Client {clientName} authenticated.");
+                            }
+                            else
+                            {
+                                SendMessage("Authentication failed");
+                                Console.WriteLine("Authentication failed for user.");
+                            }
+                        }
+                        else
+                        {
+                            SendMessage("Invalid authentication format.  Use AUTH <username> <password>");
+                        }
+
+                    }
+                    else
+                    {
+                        if (!authenticated)
+                        {
+                            Console.WriteLine("Unauthenticated client attempted to send a command.");
+                            SendMessage("Authentication required. Use AUTH <username> <password>");
+                        }
+                    }
                 }
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error handling client {clientName ?? "Unknown"}: {e.Message}");
+                Console.WriteLine($"Error handling client: {e.Message}");
             }
             finally
             {
                 server.RemoveClient(this);
                 tcpClient.Close();
-            }
-        }
-
-        private string AuthenticateClient()
-        {
-            byte[] buffer = new byte[1024];
-            int bytesRead = clientStream.Read(buffer, 0, buffer.Length);
-            string authMessage = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-
-            string[] parts = authMessage.Split(':', 2);
-            if (parts.Length != 2)
-            {
-                return "AUTH_INVALID_FORMAT";
-            }
-
-            string username = parts[0];
-            string password = parts[1];
-
-            bool isValid = SQL_Handler.VerifyPassword(username, password);
-            if (isValid)
-            {
-                SetClientName(username);
-                SetAuthenticated(true);
-                return "AUTH_OK";
-            }
-            else
-            {
-                return "AUTH_FAILED";
+                Console.WriteLine($"Client {clientName ?? "Unauthenticated Client"} disconnected.");
             }
         }
 
@@ -94,33 +93,18 @@ namespace ASCIIAssault_Server
         {
             try
             {
-                byte[] buffer = Encoding.ASCII.GetBytes(message);
-                clientStream.Write(buffer, 0, buffer.Length);
+                byte[] data = Encoding.ASCII.GetBytes(message);
+                clientStream.Write(data, 0, data.Length);
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error sending message to {clientName ?? "Unknown"}: {e.Message}");
+                Console.WriteLine($"Error sending message to client: {e.Message}");
             }
-        }
-
-        public void SetClientName(string name)
-        {
-            clientName = name;
         }
 
         public string? GetClientName()
         {
             return clientName;
-        }
-
-        public bool IsAuthenticated()
-        {
-            return authenticated;
-        }
-
-        public void SetAuthenticated(bool auth)
-        {
-            authenticated = auth;
         }
     }
 }
