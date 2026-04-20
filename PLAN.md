@@ -9,6 +9,9 @@
 
 ## Next Steps
 
-1.  Implement the core gameplay loop (server-side).
-2.  Implement client-side rendering.
-3.  Integrate client input with server-side game logic.
+1.  Implement client-side rendering.
+2.  Implement basic attacks.
+
+## Progress
+
+*   Basic movement commands (MOVEUP, MOVEDOWN, MOVELEFT, MOVERIGHT) are implemented on the server with bounds checking.
