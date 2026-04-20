@@ -14,6 +14,8 @@ namespace ASCIIAssault_Server
         private NetworkStream clientStream;
         private string? clientName;
         private bool authenticated = false;
+        private int x = 0; // Client's X position
+        private int y = 0; // Client's Y position
 
         public ClientHandler(TcpClient tcpClient, Server server)
         {
@@ -66,6 +68,26 @@ namespace ASCIIAssault_Server
                             SendMessage("Invalid authentication format.  Use AUTH <username> <password>");
                         }
 
+                    }
+                    else if (dataReceived.ToUpper() == "MOVEUP" && authenticated)
+                    {
+                        y--;
+                        SendMessage($"Moved up to {x}, {y}");
+                    }
+                    else if (dataReceived.ToUpper() == "MOVEDOWN" && authenticated)
+                    {
+                        y++;
+                        SendMessage($"Moved down to {x}, {y}");
+                    }
+                    else if (dataReceived.ToUpper() == "MOVELEFT" && authenticated)
+                    {
+                        x--;
+                        SendMessage($"Moved left to {x}, {y}");
+                    }
+                    else if (dataReceived.ToUpper() == "MOVERIGHT" && authenticated)
+                    {
+                        x++;
+                        SendMessage($"Moved right to {x}, {y}");
                     }
                     else
                     {
