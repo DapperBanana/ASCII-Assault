@@ -25,40 +25,30 @@ namespace ASCIIAssault_Server
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("New client connected!");
+                Console.WriteLine("Client connected!");
 
                 ClientHandler clientHandler = new ClientHandler(tcpClient, this);
-
                 lock (clientsLock)
-                {\r
+                {
                     clients.Add(clientHandler);
                 }
 
-                Thread clientThread = new Thread(() => clientHandler.ProcessClient());
+                Thread clientThread = new Thread(new ThreadStart(clientHandler.ProcessClient));
                 clientThread.Start();
             }
         }
 
-        public void Broadcast(string message, ClientHandler sender)
+        public void BroadcastMessage(string message, ClientHandler sender)
         {
             lock (clientsLock)
             {
                 foreach (var client in clients)
                 {
-                    if (client != sender && client.IsAuthenticated())
+                    if (client != sender && sender != null)
                     {
                         client.SendMessage(message);
                     }
                 }
-            }
-        }
-
-        public void RemoveClient(ClientHandler client)
-        {
-            lock (clientsLock)
-            {
-                clients.Remove(client);
-                Console.WriteLine($"Client {client.GetClientName() ?? "Unknown"} disconnected.  {clients.Count} clients remain.");
             }
         }
     }
