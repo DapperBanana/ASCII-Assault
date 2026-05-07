@@ -16,14 +16,11 @@ namespace ASCIIAssault_Server
         private bool authenticated = false;
         private int x = 0; // Client's X position
         private int y = 0; // Client's Y position
-        private const int MaxX = 20; // Maximum X coordinate
-        private const int MaxY = 20; // Maximum Y coordinate
-        private const int MinX = 0; //Minimum X coordinate
-        private const int MinY = 0; //Minimum Y coordinate
+        
 
-        public ClientHandler(TcpClient tcpClient, Server server)
+        public ClientHandler(TcpClient client, Server server)
         {
-            this.tcpClient = tcpClient;
+            this.tcpClient = client;
             this.server = server;
             clientStream = tcpClient.GetStream();
         }
@@ -38,108 +35,109 @@ namespace ASCIIAssault_Server
                 while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     string dataReceived = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine($"Received from {clientName ?? "Unauthenticated Client"}: {dataReceived}");
+                    Console.WriteLine("Received: " + dataReceived);
 
-                    // Basic command handling (example: BROADCAST)
-                    if (dataReceived.ToUpper().StartsWith("BROADCAST ") && authenticated)
+                    if (!authenticated)
                     {
-                        string message = dataReceived.Substring(10);
-                        server.Broadcast($"{clientName}: {message}", this);
+                        HandleAuthentication(dataReceived);
                     }
-                    else if (dataReceived.ToUpper().StartsWith("AUTH "))
+                    else
                     {
-                        string[] parts = dataReceived.Substring(5).Split(' ');
-                        if (parts.Length == 2)
-                        {
-                            string username = parts[0];
-                            string password = parts[1];
+                        HandleCommand(dataReceived);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Exception: " + ex.ToString());
+            }
+            finally
+            {
+                lock (server.clientsLock)
+                {
+                    server.clients.Remove(this);
+                }
+                tcpClient.Close();
+                Console.WriteLine("Client disconnected.");
+            }
+        }
 
-                            if (SQL_Handler.AuthenticateUser(username, password))
-                            {
-                                clientName = username;
-                                authenticated = true;
-                                SendMessage("Authentication successful");
-                                Console.WriteLine($"Client {clientName} authenticated.");
-                            }
-                            else
-                            {
-                                SendMessage("Authentication failed");
-                                Console.WriteLine("Authentication failed for user.");
-                            }
-                        }
-                        else
-                        {
-                            SendMessage("Invalid authentication format.  Use AUTH <username> <password>");
-                        }
+        private void HandleAuthentication(string data)
+        {
+            if (data.StartsWith("AUTH:"))
+            {
+                string[] parts = data.Substring(5).Split(':');
+                if (parts.Length == 2)
+                {
+                    string username = parts[0];
+                    string password = parts[1];
 
-                    }
-                    else if (dataReceived.ToUpper() == "MOVEUP" && authenticated)
+                    string hashedPassword = SQL_Handler.GetHashedPassword(username);
+
+                    if (hashedPassword != null && PasswordHelper.VerifyPassword(password, hashedPassword))
                     {
-                        if (y > MinY)
+                        authenticated = true;
+                        clientName = username;
+                        SendMessage("AUTH_OK");
+                        Console.WriteLine("Client authenticated: " + username);
+                    }
+                    else
+                    {
+                        SendMessage("AUTH_FAIL");
+                        Console.WriteLine("Authentication failed for: " + username);
+                        tcpClient.Close(); // Close connection on failed auth
+                    }
+                }
+                else
+                {
+                    SendMessage("AUTH_INVALID");
+                    tcpClient.Close(); // Close connection on invalid auth format
+                }
+            }
+            else
+            {
+                SendMessage("AUTH_REQUIRED");
+                tcpClient.Close(); // Close connection if no auth is provided
+            }
+        }
+
+        private void HandleCommand(string data)
+        {\r
+            if (data.StartsWith("MOVE:"))
+            {
+                string[] parts = data.Substring(5).Split(':');
+                if (parts.Length == 2)
+                {
+                    if (int.TryParse(parts[0], out int dx) && int.TryParse(parts[1], out int dy))
+                    {
+                        int newX = x + dx;
+                        int newY = y + dy;
+
+                        if (Game.IsWithinBounds(newX, newY))
                         {
-                            y--;
-                            SendMessage($"Moved up to {x}, {y}");
+                            x = newX;
+                            y = newY;
+                            Console.WriteLine($"Client {clientName} moved to X:{x}, Y:{y}");
+                            server.BroadcastMessage($"UPDATE:{clientName}:{x}:{y}", this);
                         }
                         else
                         {
-                            SendMessage("Reached top boundary");
-                        }
-                    }
-                    else if (dataReceived.ToUpper() == "MOVEDOWN" && authenticated)
-                    {
-                        if (y < MaxY)
-                        {
-                            y++;
-                            SendMessage($"Moved down to {x}, {y}");
-                        }
-                        else
-                        {
-                            SendMessage("Reached bottom boundary");
-                        }
-                    }
-                    else if (dataReceived.ToUpper() == "MOVELEFT" && authenticated)
-                    {
-                        if (x > MinX)
-                        {
-                            x--;
-                            SendMessage($"Moved left to {x}, {y}");
-                        }
-                        else
-                        {
-                            SendMessage("Reached left boundary");
-                        }
-                    }
-                    else if (dataReceived.ToUpper() == "MOVERIGHT" && authenticated)
-                    {
-                        if (x < MaxX)
-                        {
-                            x++;
-                            SendMessage($"Moved right to {x}, {y}");
-                        }
-                        else
-                        {
-                            SendMessage("Reached right boundary");
+                            SendMessage("Invalid move, out of bounds");
                         }
                     }
                     else
                     {
-                        if (!authenticated)
-                        {
-                            Console.WriteLine("Unauthenticated client attempted to send a command.");
-                            SendMessage("Authentication required. Use AUTH <username> <password>");
-                        }
+                        SendMessage("Invalid move format");
                     }
                 }
+                else
+                {
+                    SendMessage("Invalid move format");
+                }
             }
-            catch (Exception e)
+            else
             {
-                Console.WriteLine($"Error handling client: {e.Message}");
-            }
-            finally
-            {
-                server.RemoveClient(this);
-                tcpClient.Close();
-                Console.WriteLine($"Client {clientName ?? "Unauthenticated Client"} disconnected.");
+                SendMessage("Unknown command");
             }
         }
 
@@ -150,15 +148,10 @@ namespace ASCIIAssault_Server
                 byte[] data = Encoding.ASCII.GetBytes(message);
                 clientStream.Write(data, 0, data.Length);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error sending message to client: {e.Message}");
+                Console.WriteLine("Error sending message: " + ex.Message);
             }
-        }
-
-        public string? GetClientName()
-        {
-            return clientName;
         }
     }
 }
