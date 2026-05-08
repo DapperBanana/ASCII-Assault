@@ -115,7 +115,6 @@ namespace ASCIIAssault_Server
                                             //Broadcast current game state after move
                                             GameState currentGameState = server.GetGameState();
                                             string gameStateString = ConvertGameStateToString(currentGameState);
-                                            server.Broadcast(gameStateString, this);
                                         }
                                         else
                                         {
