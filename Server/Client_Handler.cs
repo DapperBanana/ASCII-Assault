@@ -16,7 +16,7 @@ namespace ASCIIAssault_Server
         private bool authenticated = false;
         private int x = 0; // Client's X position
         private int y = 0; // Client's Y position
-        
+
 
         public ClientHandler(TcpClient client, Server server)
         {
@@ -25,133 +25,142 @@ namespace ASCIIAssault_Server
             clientStream = tcpClient.GetStream();
         }
 
-        public void ProcessClient()
+        public string? ClientName { get => clientName; set => clientName = value; }
+        public int X { get => x; set => x = value; }
+        public int Y { get => y; set => y = value; }
+
+        public bool IsAuthenticated()
+        {
+            return authenticated;
+        }
+
+        public void RunClient()
         {
             try
             {
-                byte[] buffer = new byte[1024];
-                int bytesRead;
-
-                while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    string dataReceived = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    Console.WriteLine("Received: " + dataReceived);
-
-                    if (!authenticated)
-                    {
-                        HandleAuthentication(dataReceived);
-                    }
-                    else
-                    {
-                        HandleCommand(dataReceived);
-                    }
-                }
+                HandleClientCommunication();
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                Console.WriteLine("Exception: " + ex.ToString());
+                Console.WriteLine("Exception: " + e.Message);
             }
             finally
             {
-                lock (server.clientsLock)
-                {
-                    server.clients.Remove(this);
-                }
+                server.RemoveClient(this);
                 tcpClient.Close();
-                Console.WriteLine("Client disconnected.");
+                Console.WriteLine("Client disconnected");
             }
         }
 
-        private void HandleAuthentication(string data)
+        private void HandleClientCommunication()
         {
-            if (data.StartsWith("AUTH:"))
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+
+            while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) != 0)
             {
-                string[] parts = data.Substring(5).Split(':');
-                if (parts.Length == 2)
+                string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                Console.WriteLine("Received: " + data);
+
+                string[] commands = data.Split(';');
+
+                foreach (string command in commands)
                 {
-                    string username = parts[0];
-                    string password = parts[1];
-
-                    string hashedPassword = SQL_Handler.GetHashedPassword(username);
-
-                    if (hashedPassword != null && PasswordHelper.VerifyPassword(password, hashedPassword))
+                    string trimmedCommand = command.Trim();
+                    if (string.IsNullOrEmpty(trimmedCommand))
                     {
-                        authenticated = true;
-                        clientName = username;
-                        SendMessage("AUTH_OK");
-                        Console.WriteLine("Client authenticated: " + username);
+                        continue;
                     }
-                    else
+
+                    string[] parts = trimmedCommand.Split(' ');
+                    string action = parts[0];
+
+                    switch (action.ToLower())
                     {
-                        SendMessage("AUTH_FAIL");
-                        Console.WriteLine("Authentication failed for: " + username);
-                        tcpClient.Close(); // Close connection on failed auth
+                        case "login":
+                            if (parts.Length == 3)
+                            {
+                                string username = parts[1];
+                                string password = parts[2];
+                                if (SQL_Handler.VerifyPassword(username, password))
+                                {
+                                    authenticated = true;
+                                    ClientName = username;
+                                    SendMessage("Login successful");
+
+                                    //Initial game state broadcast to new client
+                                    GameState initialGameState = server.GetGameState();
+                                    string gameStateString = ConvertGameStateToString(initialGameState);
+                                    SendMessage(gameStateString);
+                                }
+                                else
+                                {
+                                    SendMessage("Login failed");
+                                }
+                            }
+                            break;
+
+                        case "move":
+                            if (authenticated)
+                            {
+                                if (parts.Length == 3)
+                                {
+                                    if (int.TryParse(parts[1], out int newX) && int.TryParse(parts[2], out int newY))
+                                    {
+                                        if (Game.IsWithinBounds(newX, newY))
+                                        {
+                                            X = newX;
+                                            Y = newY;
+                                            server.Broadcast("Player " + ClientName + " moved to " + X + "," + Y, this);
+                                            //Broadcast current game state after move
+                                            GameState currentGameState = server.GetGameState();
+                                            string gameStateString = ConvertGameStateToString(currentGameState);
+                                            server.Broadcast(gameStateString, this);
+                                        }
+                                        else
+                                        {
+                                            SendMessage("Invalid move: Out of bounds");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        SendMessage("Invalid move: Coordinates must be integers");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                SendMessage("Authentication required");
+                            }
+                            break;
+
+                        default:
+                            SendMessage("Invalid command");
+                            break;
                     }
                 }
-                else
-                {
-                    SendMessage("AUTH_INVALID");
-                    tcpClient.Close(); // Close connection on invalid auth format
-                }
-            }
-            else
-            {
-                SendMessage("AUTH_REQUIRED");
-                tcpClient.Close(); // Close connection if no auth is provided
             }
         }
 
-        private void HandleCommand(string data)
-        {\r
-            if (data.StartsWith("MOVE:"))
-            {
-                string[] parts = data.Substring(5).Split(':');
-                if (parts.Length == 2)
-                {
-                    if (int.TryParse(parts[0], out int dx) && int.TryParse(parts[1], out int dy))
-                    {
-                        int newX = x + dx;
-                        int newY = y + dy;
+        private string ConvertGameStateToString(GameState gameState)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("GAMEOBJ");
 
-                        if (Game.IsWithinBounds(newX, newY))
-                        {
-                            x = newX;
-                            y = newY;
-                            Console.WriteLine($"Client {clientName} moved to X:{x}, Y:{y}");
-                            server.BroadcastMessage($"UPDATE:{clientName}:{x}:{y}", this);
-                        }
-                        else
-                        {
-                            SendMessage("Invalid move, out of bounds");
-                        }
-                    }
-                    else
-                    {
-                        SendMessage("Invalid move format");
-                    }
-                }
-                else
-                {
-                    SendMessage("Invalid move format");
-                }
-            }
-            else
+            foreach (var playerPosition in gameState.PlayerPositions)
             {
-                SendMessage("Unknown command");
+                sb.AppendLine($"Player: {playerPosition.Key}, X: {playerPosition.Value.x}, Y: {playerPosition.Value.y}");
             }
+            sb.AppendLine("ENDOBJ");
+
+            return sb.ToString();
         }
+
 
         public void SendMessage(string message)
         {
-            try
-            {
-                byte[] data = Encoding.ASCII.GetBytes(message);
-                clientStream.Write(data, 0, data.Length);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error sending message: " + ex.Message);
-            }
+            byte[] data = Encoding.ASCII.GetBytes(message);
+            clientStream.Write(data, 0, data.Length);
         }
     }
 }
