@@ -1,54 +1,84 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 
 namespace ASCIIAssault_Server
 {
     public class Server
     {
         private TcpListener? tcpListener;
-        public List<ClientHandler> clients = new List<ClientHandler>();
-        public readonly object clientsLock = new object();
+        private List<ClientHandler> clients = new List<ClientHandler>();
+        private IConfiguration? _config;
+        private GameState _gameState = new GameState();
+
+        public void SetConfiguration(IConfiguration config)
+        {
+            _config = config;
+        }
 
         public void StartServer()
         {
-            tcpListener = new TcpListener(IPAddress.Any, 6969);
-            tcpListener.Start();
+            int port = int.Parse(_config?["Port"] ?? "5000");
 
-            Console.WriteLine("Server started...");
+            tcpListener = new TcpListener(IPAddress.Any, port);
+            tcpListener.Start();
+            Console.WriteLine("Server started on port " + port);
 
             while (true)
             {
                 TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("Client connected!");
+                Console.WriteLine("Client connected");
 
                 ClientHandler clientHandler = new ClientHandler(tcpClient, this);
-                lock (clientsLock)
+                lock (clients)
                 {
                     clients.Add(clientHandler);
                 }
 
-                Thread clientThread = new Thread(new ThreadStart(clientHandler.ProcessClient));
+                Thread clientThread = new Thread(() => clientHandler.RunClient());
                 clientThread.Start();
             }
         }
 
-        public void BroadcastMessage(string message, ClientHandler sender)
+        public void Broadcast(string message, ClientHandler sender)
         {
-            lock (clientsLock)
+            lock (clients)
             {
                 foreach (var client in clients)
                 {
-                    if (client != sender && sender != null)
+                    if (client != sender && client.IsAuthenticated())
                     {
                         client.SendMessage(message);
                     }
                 }
+            }
+        }
+
+        public GameState GetGameState()
+        {
+            GameState currentState = new GameState();
+            lock (clients)
+            {
+                foreach (var client in clients)
+                {
+                    if (client.IsAuthenticated() && client.ClientName != null)
+                    {
+                        currentState.PlayerPositions[client.ClientName] = (client.X, client.Y);
+                    }
+                }
+            }
+            return currentState;
+        }
+
+        public void RemoveClient(ClientHandler client)
+        {
+            lock (clients)
+            {
+                clients.Remove(client);
             }
         }
     }
