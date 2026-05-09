@@ -1,84 +1,96 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using Microsoft.Extensions.Configuration;
+using System.Threading.Tasks;
 
 namespace ASCIIAssault_Server
 {
     public class Server
     {
-        private TcpListener? tcpListener;
-        private List<ClientHandler> clients = new List<ClientHandler>();
-        private IConfiguration? _config;
-        private GameState _gameState = new GameState();
-
-        public void SetConfiguration(IConfiguration config)
-        {
-            _config = config;
-        }
+        private TcpListener tcpListener;
+        private List<ClientHandler> clientHandlers = new List<ClientHandler>();
+        private GameState currentGameState = new GameState();
+        private object gameStateLock = new object();
+        private Random random = new Random();
 
         public void StartServer()
         {
-            int port = int.Parse(_config?["Port"] ?? "5000");
-
+            int port = 5000; // TODO: read from config
             tcpListener = new TcpListener(IPAddress.Any, port);
             tcpListener.Start();
             Console.WriteLine("Server started on port " + port);
 
-            while (true)
+            Task.Run(() =>
             {
-                TcpClient tcpClient = tcpListener.AcceptTcpClient();
-                Console.WriteLine("Client connected");
-
-                ClientHandler clientHandler = new ClientHandler(tcpClient, this);
-                lock (clients)
+                while (true)
                 {
-                    clients.Add(clientHandler);
+                    TcpClient tcpClient = tcpListener.AcceptTcpClient();
+                    Console.WriteLine("Client connected");
+                    ClientHandler clientHandler = new ClientHandler(tcpClient, this);
+                    clientHandlers.Add(clientHandler);
+                    Task.Run(() => clientHandler.HandleClient());
                 }
-
-                Thread clientThread = new Thread(() => clientHandler.RunClient());
-                clientThread.Start();
-            }
+            });
         }
 
-        public void Broadcast(string message, ClientHandler sender)
+        public void BroadcastGameState()
         {
-            lock (clients)
+            lock (gameStateLock)
             {
-                foreach (var client in clients)
+                string gameStateString = GetGameStateString();
+                foreach (var client in clientHandlers)
                 {
-                    if (client != sender && client.IsAuthenticated())
-                    {
-                        client.SendMessage(message);
-                    }
+                    // Removed: no broadcast to the client
                 }
             }
         }
 
-        public GameState GetGameState()
+        private string GetGameStateString()
         {
-            GameState currentState = new GameState();
-            lock (clients)
+            lock (gameStateLock)
             {
-                foreach (var client in clients)
+                StringBuilder sb = new StringBuilder();
+                foreach (var player in currentGameState.PlayerPositions)
                 {
-                    if (client.IsAuthenticated() && client.ClientName != null)
-                    {
-                        currentState.PlayerPositions[client.ClientName] = (client.X, client.Y);
-                    }
+                    sb.AppendLine($"{player.Key}: ({player.Value.x}, {player.Value.y})");
                 }
+                return sb.ToString();
             }
-            return currentState;
         }
 
-        public void RemoveClient(ClientHandler client)
+        public void UpdatePlayerPosition(string playerName, int x, int y)
         {
-            lock (clients)
+            lock (gameStateLock)
             {
-                clients.Remove(client);
+                if (currentGameState.PlayerPositions.ContainsKey(playerName))
+                {
+                    currentGameState.PlayerPositions[playerName] = (x, y);
+                }
+            }
+            BroadcastGameState();
+        }
+
+        public (int x, int y) GetNewPlayerPosition()
+        {
+            int x, y;
+            do
+            {
+                x = random.Next(0, 20); // Assuming Game.MaxX = 20
+                y = random.Next(0, 20); // Assuming Game.MaxY = 20
+            } while (currentGameState.PlayerPositions.Values.Any(pos => pos.x == x && pos.y == y));
+            return (x, y);
+        }
+
+        public void AddNewPlayer(string playerName)
+        {
+            lock (gameStateLock)
+            {
+                (int x, int y) newPos = GetNewPlayerPosition();
+                currentGameState.PlayerPositions.Add(playerName, newPos);
             }
         }
     }
