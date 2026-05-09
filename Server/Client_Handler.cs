@@ -25,141 +25,89 @@ namespace ASCIIAssault_Server
             clientStream = tcpClient.GetStream();
         }
 
-        public string? ClientName { get => clientName; set => clientName = value; }
-        public int X { get => x; set => x = value; }
-        public int Y { get => y; set => y = value; }
-
-        public bool IsAuthenticated()
-        {
-            return authenticated;
-        }
-
-        public void RunClient()
+        public async Task HandleClient()
         {
             try
             {
-                HandleClientCommunication();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Exception: " + e.Message);
-            }
-            finally
-            {
-                server.RemoveClient(this);
-                tcpClient.Close();
-                Console.WriteLine("Client disconnected");
-            }
-        }
+                byte[] buffer = new byte[1024];
+                int bytesRead;
 
-        private void HandleClientCommunication()
-        {
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-
-            while ((bytesRead = clientStream.Read(buffer, 0, buffer.Length)) != 0)
-            {
-                string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                Console.WriteLine("Received: " + data);
-
-                string[] commands = data.Split(';');
-
-                foreach (string command in commands)
+                while ((bytesRead = await clientStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
                 {
-                    string trimmedCommand = command.Trim();
-                    if (string.IsNullOrEmpty(trimmedCommand))
-                    {
-                        continue;
-                    }
+                    string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    Console.WriteLine("Received: " + data);
 
-                    string[] parts = trimmedCommand.Split(' ');
-                    string action = parts[0];
-
-                    switch (action.ToLower())
+                    if (!authenticated)
                     {
-                        case "login":
-                            if (parts.Length == 3)
+                        // Authentication logic
+                        if (data.StartsWith("LOGIN:"))
+                        {
+                            string[] parts = data.Substring(6).Split(':');
+                            if (parts.Length == 2)
                             {
-                                string username = parts[1];
-                                string password = parts[2];
-                                if (SQL_Handler.VerifyPassword(username, password))
+                                string username = parts[0];
+                                string password = parts[1];
+
+                                if (SQL_Handler.AuthenticateUser(username, password))
                                 {
                                     authenticated = true;
-                                    ClientName = username;
-                                    SendMessage("Login successful");
+                                    clientName = username;
+                                    Console.WriteLine("User " + username + " authenticated");
 
-                                    //Initial game state broadcast to new client
-                                    GameState initialGameState = server.GetGameState();
-                                    string gameStateString = ConvertGameStateToString(initialGameState);
-                                    SendMessage(gameStateString);
+                                    // Assign initial position
+                                    (int startX, int startY) = server.GetNewPlayerPosition();
+                                    x = startX;
+                                    y = startY;
+                                    server.AddNewPlayer(clientName);
+
+                                    byte[] authResponse = Encoding.UTF8.GetBytes("Authentication successful\n");
+                                    await clientStream.WriteAsync(authResponse, 0, authResponse.Length);
                                 }
                                 else
                                 {
-                                    SendMessage("Login failed");
+                                    byte[] authResponse = Encoding.UTF8.GetBytes("Authentication failed\n");
+                                    await clientStream.WriteAsync(authResponse, 0, authResponse.Length);
                                 }
                             }
-                            break;
-
-                        case "move":
-                            if (authenticated)
+                        }
+                        else
+                        {
+                            byte[] response = Encoding.UTF8.GetBytes("Authentication required\n");
+                            await clientStream.WriteAsync(response, 0, response.Length);
+                        }
+                    }
+                    else
+                    {
+                        // Game logic
+                        if (data.StartsWith("MOVE:"))
+                        {
+                            string[] parts = data.Substring(5).Split(':');
+                            if (parts.Length == 2)
                             {
-                                if (parts.Length == 3)
+                                if (int.TryParse(parts[0], out int newX) && int.TryParse(parts[1], out int newY))
                                 {
-                                    if (int.TryParse(parts[1], out int newX) && int.TryParse(parts[2], out int newY))
+                                    if (Game.IsWithinBounds(newX, newY))
                                     {
-                                        if (Game.IsWithinBounds(newX, newY))
-                                        {
-                                            X = newX;
-                                            Y = newY;
-                                            server.Broadcast("Player " + ClientName + " moved to " + X + "," + Y, this);
-                                            //Broadcast current game state after move
-                                            GameState currentGameState = server.GetGameState();
-                                            string gameStateString = ConvertGameStateToString(currentGameState);
-                                        }
-                                        else
-                                        {
-                                            SendMessage("Invalid move: Out of bounds");
-                                        }
-                                    }
-                                    else
-                                    {
-                                        SendMessage("Invalid move: Coordinates must be integers");
+                                        x = newX;
+                                        y = newY;
+                                        server.UpdatePlayerPosition(clientName, x, y);
                                     }
                                 }
                             }
-                            else
-                            {
-                                SendMessage("Authentication required");
-                            }
-                            break;
-
-                        default:
-                            SendMessage("Invalid command");
-                            break;
+                        }
                     }
                 }
             }
-        }
-
-        private string ConvertGameStateToString(GameState gameState)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine("GAMEOBJ");
-
-            foreach (var playerPosition in gameState.PlayerPositions)
+            catch (Exception ex)
             {
-                sb.AppendLine($"Player: {playerPosition.Key}, X: {playerPosition.Value.x}, Y: {playerPosition.Value.y}");
+                Console.WriteLine("Error: " + ex.Message);
             }
-            sb.AppendLine("ENDOBJ");
-
-            return sb.ToString();
-        }
-
-
-        public void SendMessage(string message)
-        {
-            byte[] data = Encoding.ASCII.GetBytes(message);
-            clientStream.Write(data, 0, data.Length);
+            finally
+            {
+                tcpClient.Close();
+                clientHandlers.Remove(this); // Remove client from list when disconnected
+                Console.WriteLine("Client disconnected");
+            }
         }
     }
 }
