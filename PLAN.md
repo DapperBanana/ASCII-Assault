@@ -10,8 +10,4 @@
 ## Next Steps
 
 1.  Implement client-side rendering.
-2.  Implement basic attacks.
-
-## Progress
-
-*   Basic movement commands (MOVEUP, MOVEDOWN, MOVELEFT, MOVERIGHT) are implemented on the server with bounds checking.
+2.  Implement initial player placement on the server.
