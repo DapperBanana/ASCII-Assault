@@ -34,98 +34,71 @@ namespace ASCIIAssault_Server
 
                 while ((bytesRead = await clientStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
                 {
-                    string data = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
                     Console.WriteLine($"Received from client: {data}");
 
-                    // Handle authentication first
-                    if (!authenticated)
+                    string[] parts = data.Split(' ');
+
+                    if (parts.Length > 0)
                     {
-                        if (data.StartsWith("LOGIN:"))
+                        string command = parts[0].ToLower();
+
+                        switch (command)
                         {
-                            string[] credentials = data.Substring(6).Split(':');
-                            if (credentials.Length == 2)
-                            {
-                                string username = credentials[0];
-                                string password = credentials[1];
-
-                                if (SQL_Handler.AuthenticateUser(username, password))
+                            case "move":
+                                if (authenticated && parts.Length == 2)
                                 {
-                                    clientName = username;
-                                    authenticated = true;
+                                    string direction = parts[1].ToLower();
+                                    (int newX, int newY) = Game.CalculateNewPosition(x, y, direction);
 
-                                    // Set initial position if it doesn't exist
-                                    if (!server.gameState.PlayerPositions.ContainsKey(clientName))
+                                    if (Game.IsWithinBounds(newX, newY))
                                     {
-                                        var initialPosition = server.GetAvailableSpawnPoint();
-                                        x = initialPosition.x;
-                                        y = initialPosition.y;
-                                        server.gameState.PlayerPositions[clientName] = (x, y);
+                                        x = newX;
+                                        y = newY;
+                                        server.UpdatePlayerPosition(clientName, x, y);
+                                        Console.WriteLine($"Client {clientName} moved {direction} to ({x}, {y})");
                                     }
+                                    else
+                                    {
+                                        Console.WriteLine($"Client {clientName} tried to move out of bounds.");
+                                    }
+                                }
+                                break;
 
-                                    string response = "LOGIN_SUCCESS";
-                                    byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-                                    await clientStream.WriteAsync(responseBytes, 0, responseBytes.Length);
-                                    server.BroadcastGameState();
-                                }
-                                else
+                            case "authenticate":
+                                if (parts.Length == 3)
                                 {
-                                    string response = "LOGIN_FAILED";
-                                    byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-                                    await clientStream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                                    string username = parts[1];
+                                    string password = parts[2];
+
+                                    if (SQL_Handler.AuthenticateUser(username, password))
+                                    {
+                                        clientName = username;
+                                        authenticated = true;
+                                        Console.WriteLine($"Client {clientName} authenticated successfully.");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"Authentication failed for {username}.");
+                                    }
                                 }
-                            }
-                        }
-                        else
-                        {
-                            string response = "INVALID_COMMAND";
-                            byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-                            await clientStream.WriteAsync(responseBytes, 0, responseBytes.Length);
-                        }
-                    }
-                    else
-                    {
-                        // Handle game commands
-                        if (data.Equals("MOVE_UP") && Game.IsWithinBounds(x, y - 1))
-                        {
-                            y--;
-                            server.gameState.PlayerPositions[clientName] = (x, y);
-                            server.BroadcastGameState();
-                        }
-                        else if (data.Equals("MOVE_DOWN") && Game.IsWithinBounds(x, y + 1))
-                        {
-                            y++;
-                            server.gameState.PlayerPositions[clientName] = (x, y);
-                            server.BroadcastGameState();
-                        }
-                        else if (data.Equals("MOVE_LEFT") && Game.IsWithinBounds(x - 1, y))
-                        {
-                            x--;
-                            server.gameState.PlayerPositions[clientName] = (x, y);
-                            server.BroadcastGameState();
-                        }
-                        else if (data.Equals("MOVE_RIGHT") && Game.IsWithinBounds(x + 1, y))
-                        {
-                            x++;
-                            server.gameState.PlayerPositions[clientName] = (x, y);
-                            server.BroadcastGameState();
-                        }
-                        else
-                        {
-                            string response = "INVALID_COMMAND";
-                            byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-                            await clientStream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                                break;
+
+                            default:
+                                Console.WriteLine($"Invalid command from client: {command}");
+                                break;
                         }
                     }
                 }
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Exception: {e.Message}");
+                Console.WriteLine($"Error handling client: {e.Message}");
             }
             finally
             {
                 Console.WriteLine("Client disconnected.");
-                server.RemoveClient(this);
+                server.RemoveClient(clientName);
                 tcpClient.Close();
             }
         }
