@@ -9,5 +9,5 @@
 
 ## Next Steps
 
-1.  Implement the core gameplay loop.
-2.  Implement client-side rendering.
+1.  Implement client-side rendering to display game state.
+2.  Update the server to broadcast changes to all clients.
