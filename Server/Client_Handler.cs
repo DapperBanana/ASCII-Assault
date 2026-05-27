@@ -22,121 +22,159 @@ namespace ASCIIAssault_Server
         {
             this.tcpClient = client;
             this.server = server;
-            clientStream = client.GetStream();
         }
 
-        public async Task HandleClient()
+        public void RunClient()
+        {
+            clientStream = tcpClient.GetStream();
+            HandleClient();
+        }
+
+        private void HandleClient()
         {
             try
             {
-                byte[] buffer = new byte[1024];
+                byte[] message = new byte[4096];
                 int bytesRead;
 
-                // Send initial positions to new client
-                SendInitialPositions();
+                // Handle authentication first
+                if (!AuthenticateClient()) return;
 
-                while ((bytesRead = await clientStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
+
+                // Send initial game state to the client
+                SendInitialGameState();
+
+                while (true)
                 {
-                    string data = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    string[] parts = data.Split(' ');
-
-                    if (parts.Length > 0)
+                    bytesRead = 0;
+                    try
                     {
-                        string command = parts[0].ToLower();
-
-                        switch (command)
-                        {
-                            case "login":
-                                if (parts.Length == 3)
-                                {
-                                    string username = parts[1];
-                                    string password = parts[2];
-                                    if (Authenticate(username, password))
-                                    {
-                                        clientName = username;
-                                        authenticated = true;
-
-                                        // Send confirmation message
-                                        string authMessage = "Authentication successful.\n";
-                                        byte[] authMessageBytes = Encoding.ASCII.GetBytes(authMessage);
-                                        await clientStream.WriteAsync(authMessageBytes, 0, authMessageBytes.Length);
-
-                                        // Get initial position from server
-                                        (x, y) = server.GetPlayerPosition(clientName);
-                                        Console.WriteLine($"Client {clientName} connected from {tcpClient.Client.RemoteEndPoint} at position ({x}, {y})");
-                                    }
-                                    else
-                                    {
-                                        // Send authentication failure message
-                                        string failMessage = "Authentication failed.\n";
-                                        byte[] failMessageBytes = Encoding.ASCII.GetBytes(failMessage);
-                                        await clientStream.WriteAsync(failMessageBytes, 0, failMessageBytes.Length);
-                                    }
-                                }
-                                break;
-
-                            case "move":
-                                if (authenticated && parts.Length == 2)
-                                {\n                                    string direction = parts[1];
-
-                                    // Calculate new position using Game class
-                                    (int newX, int newY) = Game.CalculateNewPosition(x, y, direction);
-
-                                    // Check bounds using Game class
-                                    if (Game.IsWithinBounds(newX, newY))
-                                    {
-                                        x = newX;
-                                        y = newY;
-
-                                        // Update server's game state
-                                        server.UpdatePlayerPosition(clientName, (x, y));
-                                    }
-                                    else
-                                    {
-                                        // Send out of bounds message
-                                        string oobMessage = "Cannot move in that direction, out of bounds.\n";
-                                        byte[] oobMessageBytes = Encoding.ASCII.GetBytes(oobMessage);
-                                        await clientStream.WriteAsync(oobMessageBytes, 0, oobMessageBytes.Length);
-                                    }
-
-                                    // Broadcast updated positions to all clients
-                                    server.BroadcastPlayerPositions();
-                                }
-                                break;
-
-                            default:
-                                Console.WriteLine($"Received: {data} from Client {tcpClient.Client.RemoteEndPoint}");
-                                break;
-                        }
+                        bytesRead = clientStream.Read(message, 0, message.Length);
                     }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Error reading from client: " + ex.Message);
+                        break;
+                    }
+
+                    if (bytesRead == 0)
+                    {
+                        // Client disconnected
+                        Console.WriteLine("Client disconnected");
+                        break;
+                    }
+
+                    string command = Encoding.UTF8.GetString(message, 0, bytesRead);
+                    Console.WriteLine("Received command: " + command);
+                    ProcessCommand(command);
+
                 }
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                Console.WriteLine($"Exception in ClientHandler: {ex.Message}");
+                Console.WriteLine(e.ToString());
             }
             finally
             {
-                Console.WriteLine($"Client disconnected: {tcpClient.Client.RemoteEndPoint}");
-                server.RemoveClient(clientName);
                 tcpClient.Close();
             }
         }
 
-        private bool Authenticate(string username, string password)
+        private bool AuthenticateClient()
         {
-            return SQL_Handler.VerifyPassword(username, password);
+            byte[] buffer = new byte[1024];
+            int bytesRead = clientStream.Read(buffer, 0, buffer.Length);
+            string request = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            if (request.StartsWith("AUTH "))
+            {
+                string[] parts = request.Substring(5).Split(':');
+                if (parts.Length == 2)
+                {
+                    string username = parts[0];
+                    string password = parts[1];
+
+                    if (SQL_Handler.VerifyPassword(username, password))
+                    {
+                        clientName = username;
+                        authenticated = true;
+                        Console.WriteLine($"Client {username} authenticated successfully.");
+                        byte[] response = Encoding.UTF8.GetBytes("AUTH_OK");
+                        clientStream.Write(response, 0, response.Length);
+                        return true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Authentication failed for {username}.");
+                        byte[] response = Encoding.UTF8.GetBytes("AUTH_FAIL");
+                        clientStream.Write(response, 0, response.Length);
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("Authentication attempt failed.");
+                byte[] response = Encoding.UTF8.GetBytes("AUTH_REQUIRED");
+                clientStream.Write(response, 0, response.Length);
+                return false;
+            }
+
+            return false;
         }
 
-        // Send initial positions of all players to the new client
-        private async void SendInitialPositions()
+        private void ProcessCommand(string command)
         {
-            if (clientStream != null)
+            command = command.Trim().ToLower();
+
+            string[] parts = command.Split(' ');
+
+            if (parts.Length > 0)
             {
-                string positions = server.GetCurrentPlayerPositions();
-                byte[] positionsBytes = Encoding.ASCII.GetBytes(positions);
-                await clientStream.WriteAsync(positionsBytes, 0, positionsBytes.Length);
+                switch (parts[0])
+                {\n                    case "move":
+                        if (parts.Length == 2)
+                        {
+                            string direction = parts[1];
+                            (int newX, int newY) = Game.CalculateNewPosition(x, y, direction);
+
+                            if (Game.IsWithinBounds(newX, newY))
+                            {
+                                x = newX;
+                                y = newY;
+
+                                Console.WriteLine($"Client {clientName} moved {direction} to ({x}, {y})");
+                                //TODO: update game state and broadcast to all clients
+
+
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Client {clientName} attempted to move out of bounds.");
+                            }
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine($"Unknown command: {command}");
+                        break;
+                }
             }
+        }
+
+        private void SendInitialGameState()
+        {
+            // Get the current player positions
+            GameState gameState = Game.GetCurrentPlayerPositions();
+
+            // Serialize the game state to JSON
+            string gameStateJson = System.Text.Json.JsonSerializer.Serialize(gameState);
+
+            // Send the game state to the client
+            byte[] gameStateBytes = Encoding.UTF8.GetBytes(gameStateJson);
+            clientStream.Write(gameStateBytes, 0, gameStateBytes.Length);
+
+            Console.WriteLine("Sent initial game state to client.");
         }
     }
 }
